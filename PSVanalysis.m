@@ -1,6 +1,6 @@
 %% PSV Data Analysis
 % David Ellswoth
-% 2015-07-31
+% 2015-11-09
 %
 % Reads data from all .txt files in folder
 % Subtracts background voltage and finds average signal over time interval
@@ -12,10 +12,15 @@ clear all;
 fprintf('\nRunning\n');
 %% Setup
 
+tempData = 0;                   % use temperature data?
+
 zeroTime = 45;                  % time to zero average (s)
+
+autoAvg = 1;                    % 0= use avg times below, 1= detect light on from data file
+
 avgStart = 55;                  % when to start data average (s)
-avgStop = 95;                  % when to stop data average (s)
-cutoff = 150;                   % when to truncate data file (s)
+avgStop = 95;                   % when to stop data average (s)
+cutoff = 300;                   % when to truncate data file (s)
 
 files = dir('*.txt');
 numFiles = size(files,1);
@@ -32,8 +37,13 @@ VoltageOutput{2,2} = 'uV';
 VoltageOutput{1,3} = 'StDev';
 VoltageOutput{1,4} = 'Percent';
 
+
 testData = importdata(files(1).name,'\t',1);
-[~, cutoffIndex] = min(abs(testData.data(:,1)-cutoff));
+if autoAvg == 1
+    cutoffIndex = find(testData.data(:,5)==999)-1;
+else
+    [~, cutoffIndex] = min(abs(testData.data(:,1)-cutoff));
+end
 testData = testData.data(1:cutoffIndex);
 DataOutput = cell(length(testData)+3,numFiles*2);
 
@@ -43,7 +53,7 @@ for i=1:numFiles
     %% Import data file
     data = importdata(files(i).name,'\t',1);
     
-    % extract part of filename after equal sign (and remove file extension)
+    % extract part of filename after dash (and remove file extension)
     [~, name] = strtok(files(i).name,'-');
     dataName = name(2:end-4);
     
@@ -53,24 +63,56 @@ for i=1:numFiles
     
     normData(:,1) = data.data(1:cutoffIndex,1);
     normData(:,2) = (data.data(1:cutoffIndex,2)-zeroAvg);
+    zeroAvgT = mean(data.data(1:zeroIndex,3));
+    normData(:,3) = (data.data(1:cutoffIndex,3)-zeroAvgT);
+    normData(:,4) = data.data(1:cutoffIndex,5);
     
-    DataOutput{1,2*i-1} = 'Time';
-    DataOutput{2,2*i-1} = 's';
-    DataOutput{1,2*i} = 'Voltage';
-    DataOutput{2,2*i} = 'uV';
-    DataOutput{3,2*i} = dataName;
+    if tempData == 1
+        DataOutput{1,3*i-2} = 'Time';
+        DataOutput{2,3*i-2} = 's';
+        DataOutput{1,3*i-1} = 'Voltage';
+        DataOutput{2,3*i-1} = 'uV';
+        DataOutput{3,3*i-1} = dataName;
+        DataOutput{1,3*i} = 'Delta T';
+        DataOutput{2,3*i} = 'C';
+    else
+        DataOutput{1,2*i-1} = 'Time';
+        DataOutput{2,2*i-1} = 's';
+        DataOutput{1,2*i} = 'Voltage';
+        DataOutput{2,2*i} = 'uV';
+        DataOutput{3,2*i} = dataName;
+    end
     
     for j=1:length(normData)
-        DataOutput{j+3,2*i-1} = normData(j,1);
-        DataOutput{j+3,2*i} = normData(j,2);
+        if tempData == 1
+            DataOutput{j+3,3*i-2} = normData(j,1);
+            DataOutput{j+3,3*i-1} = normData(j,2);
+            DataOutput{j+3,3*i} = normData(j,3);
+        else
+            DataOutput{j+3,2*i-1} = normData(j,1);
+            DataOutput{j+3,2*i} = normData(j,2);
+        end
     end
     
     %% Find avgerage voltage signal
-    [~, startIndex] = min(abs(normData(:,1)-avgStart));
-    [~, stopIndex] = min(abs(normData(:,1)-avgStop));
-    
-    avgV = mean(normData(startIndex:stopIndex,2));
-    stdV = std(normData(startIndex:stopIndex,2));
+    if autoAvg == 1
+        lightOn = zeros(sum(normData(:,4)~=0));
+        for j = 2:cutoffIndex-1
+            if normData(j-1,4)==100 && normData(j+1,4)==100
+                lightOn(j) = j;
+            end
+        end
+        lightOn = lightOn(lightOn~=0);
+        
+        avgV = mean(normData(lightOn,2));
+        stdV = std(normData(lightOn,2));
+    else
+        [~, startIndex] = min(abs(normData(:,1)-avgStart));
+        [~, stopIndex] = min(abs(normData(:,1)-avgStop));
+        
+        avgV = mean(normData(startIndex:stopIndex,2));
+        stdV = std(normData(startIndex:stopIndex,2));
+    end
     
     VoltageOutput{i+2,1} = dataName;
     VoltageOutput{i+2,2} = avgV;
@@ -80,7 +122,7 @@ end
 
 %% Find percent of max voltage
 
-voltages = cell2mat(VoltageOutput(3:end,2));
+voltages = abs(cell2mat(VoltageOutput(3:end,2)));
 maxV = max(voltages);
 voltages = voltages./maxV;
 for l = 1:length(voltages)
