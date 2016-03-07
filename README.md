@@ -5,4 +5,4 @@ Various analysis tools for magnetics research
 `FMRdatafitting.m` and `PolarAngleFitting.m` are used for fitting the Lorentzian derivative from ferromagnetic resonance measurements.
 
 ## PSV
-`PSVanalysis.m` is used for cleaning up time domain data from the photo-spin-voltaic effect.
+`PSVanalysis.m` is used for cleaning up and analyzing time domain data from the photo-spin-voltaic effect.
