@@ -1,5 +1,5 @@
 # Magnetic_Analysis
-Various analysis tools for magnetics research
+Various Matlab analysis tools for magnetics research.
 
 ## FMR data fitting
 #### FMRdatafitting.m
