@@ -1,13 +1,12 @@
 %% Polar angle linewidth fitting
-% Praveen/Houchen/David 14-Mar-2014
+% David Ellsworth 2014-03-14
 %
 % Fits data in Data.dat with polar angle dependent gilbert damping eqn
-% FittingResults.dat should match output of FMRdatafittingFinal.m (from
-% polar angle data fitting) with col(1) (filename) replaced with angle
+% FittingResults.dat should match output of FMRdatafitting.m (from
+% polar angle data fitting) with col(1) (filename) replaced with angle.
 %
 % Reads 4piMs and gamma from AnaysisResults.dat (from freq dependent
-% analysis). To enter values manually comment out line 33-35 and uncomment
-% line 36-37.
+% analysis). To enter values manually set dataImport = 0.
 %
 % Outputs fitted alpha and Theta vs dH curve to ThetaVsDh.dat
 %
@@ -30,13 +29,19 @@ Theta = (LinewidthData.data(:,1))';
 LineWidth = (LinewidthData.data(:,3))';
 f = mean(LinewidthData.data(:,2));
 
-% Comment/uncomment below if using data import or not
-SampleData = importdata('AnalysisResults.dat','\t',1);
-fourpiMs = SampleData.data(3)/1000;
-gamma = SampleData.data(1)*10^-6;
-% fourpiMs = 15.5;
-% gamma = 2.8;
-Ha = 0;             % in kOe
+% set 4piMs and gamma values
+dataImport = 1;             % 1 = import data from AnalysisResults.dat
+                            % 0 = use values below
+
+if dataImport
+    SampleData = importdata('AnalysisResults.dat','\t',1);
+    fourpiMs = SampleData.data(3)/1000;
+    gamma = SampleData.data(1)*10^-6;
+else
+    fourpiMs = 15.5;        % kG
+    gamma = 2.8;            % Oe/GHz
+end
+Ha = 0;                     % kOe
 
 Hini = f/gamma+fourpiMs-Ha;
 
@@ -88,8 +93,8 @@ end
 %% Gilbert Fit
 
 F1 = @(x,xdata)x(1)*2*xdata*2*f/gamma;
-x=0.003;                                % error estimate
-[beta,r,J,COVB,mse] = nlinfit(OneOverC,LineWidth,F1,x);
+err=0.003;                              % error estimate
+[beta,r,J,COVB,mse] = nlinfit(OneOverC,LineWidth,F1,err);
 
 Alpha = beta*10^-3*sqrt(3)              %damping parameter
 AlphaErr=nlparci(beta,r,J);             %Upper and lower bounds for error
@@ -114,7 +119,7 @@ hold on;
 plot(OneOverC,LineWidth,'o');
 
 %% Outputs
-file1=fopen('ThetaVsHmr.dat','w');
+file1=fopen('ThetaVsHfmr.dat','w');
 fprintf(file1,'%s\t%s\t%s\r\n','Theta','Hfmr','Phi');
 fprintf(file1,'%f\t%f\t%f\r\n',[ThetaC;HfmrC;PhiC]);
 fclose('all');
