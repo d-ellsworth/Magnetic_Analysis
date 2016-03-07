@@ -16,7 +16,12 @@ tempData = 0;                   % use temperature data?
 
 zeroTime = 45;                  % time to zero average (s)
 
-autoAvg = 1;                    % 0= use avg times below, 1= detect light on from data file
+autoAvg = 1;                    % 0= use avg times below
+                                % 1= detect light on from data file
+
+get_mag = 0;                    % use to extract magnetic component of data 
+                                % Files must be in order:
+                                %   x1_+h, x1_-h, x2_+h, x2_-h...
 
 avgStart = 55;                  % when to start data average (s)
 avgStop = 95;                   % when to stop data average (s)
@@ -26,7 +31,8 @@ files = dir('*.txt');
 numFiles = size(files,1);
 
 if numFiles == 0
-    error('PSVanalysis:noData','*** Error: No fitting data found ***\n\tData must be *.txt file.');
+    error('PSVanalysis:noData',['*** Error: No fitting data found ***'...
+                                '\n\tData must be *.txt file.']);
 end
 
 % initialize outputs
@@ -48,26 +54,17 @@ end
 testData = testData.data(1:cutoffIndex);
 DataOutput = cell(length(testData)+3,numFiles*2);
 
-%% Read and modify files
+%% Read files
 
 for i=1:numFiles
-    %% Import data file
+    % import data file
     data = importdata(files(i).name,'\t',1);
     
     % extract part of filename after dash (and remove file extension)
     [~, name] = strtok(files(i).name,'-');
     dataName = name(2:end-4);
     
-    %% Find and subtract background
-    [~, zeroIndex] = min(abs(data.data(:,1)-zeroTime));
-    zeroAvg = mean(data.data(1:zeroIndex,2));
-    
-    normData(:,1) = data.data(1:cutoffIndex,1);
-    normData(:,2) = (data.data(1:cutoffIndex,2)-zeroAvg);
-    zeroAvgT = mean(data.data(1:zeroIndex,3));
-    normData(:,3) = (data.data(1:cutoffIndex,3)-zeroAvgT);
-    normData(:,4) = data.data(1:cutoffIndex,5);
-    
+    % setup output headers
     if tempData == 1
         DataOutput{1,3*i-2} = 'Time';
         DataOutput{2,3*i-2} = 's';
@@ -84,38 +81,109 @@ for i=1:numFiles
         DataOutput{3,2*i} = dataName;
     end
     
-    for j=1:length(normData)
-        if tempData == 1
-            DataOutput{j+3,3*i-2} = normData(j,1);
-            DataOutput{j+3,3*i-1} = normData(j,2);
-            DataOutput{j+3,3*i} = normData(j,3);
-        else
-            DataOutput{j+3,2*i-1} = normData(j,1);
-            DataOutput{j+3,2*i} = normData(j,2);
-        end
-    end
+    %% Find and subtract background
     
-    %% Find avgerage voltage signal
+    [~, zeroIndex] = min(abs(data.data(:,1)-zeroTime));
+    zeroAvg = mean(data.data(1:zeroIndex,2));
+    zeroAvgT = mean(data.data(1:zeroIndex,3));
+    
+    fixData(:,1) = data.data(1:cutoffIndex,1);             % time
+    fixData(:,2) = data.data(1:cutoffIndex,2)-zeroAvg;     % voltage
+    fixData(:,3) = data.data(1:cutoffIndex,3)-zeroAvgT;    % delta T
+    fixData(:,4) = data.data(1:cutoffIndex,5);             % light on
+      
+    %% Prep for voltage averaging
+    % period to be averaged is made imaginary if using autoAvg
+    
     if autoAvg == 1
-        lightOn = zeros(sum(normData(:,4)~=0));
-        for j = 2:cutoffIndex-1
-            if normData(j-1,4)==100 && normData(j+1,4)==100
-                lightOn(j) = j;
+        for k = 3:cutoffIndex-2
+            % if the light is on for the previous two and next two data
+            % points then flag for averaging
+            if fixData(k-2,4)==100 && fixData(k+2,4)==100
+                fixData(k,2) = fixData(k,2)*1j;
             end
         end
-        lightOn = lightOn(lightOn~=0);
-        
-        avgV = mean(normData(lightOn,2));
-        stdV = std(normData(lightOn,2));
-    else
-        [~, startIndex] = min(abs(normData(:,1)-avgStart));
-        [~, stopIndex] = min(abs(normData(:,1)-avgStop));
-        
-        avgV = mean(normData(startIndex:stopIndex,2));
-        stdV = std(normData(startIndex:stopIndex,2));
     end
     
-    VoltageOutput{i+3,1} = dataName;
+    %% Write output
+    
+    for k=1:length(fixData)
+        if tempData == 1
+            DataOutput{k+3,3*i-2} = fixData(k,1);
+            DataOutput{k+3,3*i-1} = fixData(k,2);
+            DataOutput{k+3,3*i} = fixData(k,3);
+        else
+            DataOutput{k+3,2*i-1} = fixData(k,1);
+            DataOutput{k+3,2*i} = fixData(k,2);
+        end
+    end
+
+end
+
+%% Extract magnetic component
+% must set get_mag = 1 in setup section
+% data must be in order: x1_+h, x1_-h, x2_+h, x2_-h...
+
+if (get_mag==1) && (tempData~=1)
+    for i=1:size(DataOutput,2)/4
+        % find magnetic and non-magnetic components
+        for k = 4:length(DataOutput)
+            pos_h_t = DataOutput{k,4*i-3};
+            pos_h_v = DataOutput{k,4*i-2};
+            neg_h_t = DataOutput{k,4*i-1};
+            neg_h_v = DataOutput{k,4*i  };
+            
+            avgT = (pos_h_t + neg_h_t)/2;
+            mag = (pos_h_v - neg_h_v)/2;
+            nonMag = (pos_h_v + neg_h_v)/2;
+            
+            DataOutput{k,4*i-3} = avgT;
+            DataOutput{k,4*i-2} = mag;
+            DataOutput{k,4*i-1} = avgT;
+            DataOutput{k,4*i  } = nonMag;
+        end
+        % Change output labels
+        tmpStr = DataOutput{3,4*i-2};
+        DataOutput{3,4*i-2} = strcat(tmpStr(1:end-2),'Mag');
+        tmpStr = DataOutput{3,4*i  };
+        DataOutput{3,4*i  } = strcat(tmpStr(1:end-2),'Non-Mag');
+        
+    end
+end
+
+%% Find average voltage signal
+% if using autoAvg: average imaginary numbers, make them real again
+% otherwise average over times specified in setup
+
+for i=1:size(DataOutput,2)/2
+    if autoAvg == 1
+        avgData = zeros(length(DataOutput));
+        for k = 4:length(DataOutput)
+            if (isreal(DataOutput{k-2,2*i})==0)
+                avgData(k) = imag(DataOutput{k,2*i});
+                DataOutput{k-2,2*i} = imag(DataOutput{k-2,2*i});
+            end
+        end
+        avgData = avgData(avgData~=0);
+        
+        avgV = mean(avgData);
+        stdV = std(avgData);
+    else
+        avgData = zeros(length(DataOutput));
+        avgTime = zeros(length(DataOutput));
+        for k = 4:length(DataOutput)
+            avgData(k) = DataOutput{k,i*2};
+            avgTime(k) = DataOutput{k,i*2-1};
+        end
+        
+        [~, startIndex] = min(abs(avgTime-avgStart));
+        [~, stopIndex] = min(abs(avgTime-avgStop));
+        
+        avgV = mean(avgData(startIndex:stopIndex));
+        stdV = std(avgData(startIndex:stopIndex));
+    end
+     
+    VoltageOutput{i+3,1} = DataOutput{3,2*i};
     VoltageOutput{i+3,2} = avgV;
     VoltageOutput{i+3,3} = stdV;
     
@@ -126,9 +194,11 @@ end
 voltages = abs(cell2mat(VoltageOutput(3:end,2)));
 volt_err = abs(cell2mat(VoltageOutput(3:end,3)));
 [maxV, max_err] = max(voltages);
+percent_volt = round((voltages./maxV)*10000)/100;
 for l = 1:length(voltages)
     VoltageOutput{l+3,4} = voltages(l)/maxV *100 ;
-    VoltageOutput{l+3,5} = voltages(l)/maxV *100 * sqrt( (volt_err(max_err) / maxV)^2 + (volt_err(l)/voltages(l))^2);
+    VoltageOutput{l+3,5} = voltages(l)/maxV *100 * ...
+        sqrt((volt_err(max_err)/maxV)^2 + (volt_err(l)/voltages(l))^2);
 end
 
 %% Output results
@@ -145,11 +215,13 @@ formatSpec2 = strcat(formatSpec2,'\n');
 
 fileID1 = fopen('DataOutput.dat','w');
 if fileID1 == -1
-    fprintf(2,'\n*** Error: DataOutput.dat already open. Close file and press the any key *** \n');
+    fprintf(2,['\n*** Error: DataOutput.dat already open.'...
+               ' Close file and press the any key *** \n']);
     pause;
     fileID1 = fopen('DataOutput.dat','w');
     if fileID1 == -1
-        error('*** Error: DataOutput.dat is still open. Run the program again ***');
+        error(['*** Error: DataOutput.dat is still open.'...
+               ' Run the program again ***']);
     end
 end
 fprintf(fileID1,formatSpec1,DataOutput{1,:});
@@ -163,21 +235,23 @@ fclose(fileID1);
 
 fileID2 = fopen('VoltageOutput.dat','w');
 if fileID2 == -1
-    fprintf(2,'\n*** Error: VoltageOutput.dat already open. Close file and press the any key *** \n');
+    fprintf(2,['\n*** Error: VoltageOutput.dat already open.'...
+               ' Close file and press the any key *** \n']);
     pause;
     fileID2 = fopen('VoltageOutput.dat','w');
     if fileID2 == -1
-        error('*** Error: VoltageOutput.dat is still open. Run the program again *** ');
+        error(['*** Error: VoltageOutput.dat is still open.'...
+              ' Run the program again *** ']);
     end
 end
 fprintf(fileID2,'%s\t%s\t%s\t%s\t%s\n',VoltageOutput{1,:});
 fprintf(fileID2,'%s\t%s\t%s\t%s\t%s\n',VoltageOutput{2,:});
 fprintf(fileID2,'%s\t%s\t%s\t%s\t%s\n',VoltageOutput{3,:});
 for row = 4:length(VoltageOutput)
-    fprintf(fileID2,'%s\t%6.4f\t%6.4f\t%4.2f\t%4.2f\n',VoltageOutput{row,:});
+    fprintf(fileID2,'%s\t%6.4f\t%6.4f\t%4.2f\t%4.2f\n',...
+            VoltageOutput{row,:});
 end
 fclose(fileID2);
-
 
 fclose('all');
 fprintf('\nDone\n');
