@@ -30,12 +30,13 @@ if numFiles == 0
 end
 
 % initialize outputs
-VoltageOutput = cell(numFiles+2,4);
+VoltageOutput = cell(numFiles+3,5);
 VoltageOutput{1,1} = 'Filter';
 VoltageOutput{1,2} = 'Average Voltage';
 VoltageOutput{2,2} = 'uV';
 VoltageOutput{1,3} = 'StDev';
 VoltageOutput{1,4} = 'Percent';
+VoltageOutput{1,5} = 'P Error';
 
 
 testData = importdata(files(1).name,'\t',1);
@@ -114,19 +115,20 @@ for i=1:numFiles
         stdV = std(normData(startIndex:stopIndex,2));
     end
     
-    VoltageOutput{i+2,1} = dataName;
-    VoltageOutput{i+2,2} = avgV;
-    VoltageOutput{i+2,3} = stdV;
+    VoltageOutput{i+3,1} = dataName;
+    VoltageOutput{i+3,2} = avgV;
+    VoltageOutput{i+3,3} = stdV;
     
 end
 
 %% Find percent of max voltage
 
 voltages = abs(cell2mat(VoltageOutput(3:end,2)));
-maxV = max(voltages);
-voltages = voltages./maxV;
+volt_err = abs(cell2mat(VoltageOutput(3:end,3)));
+[maxV, max_err] = max(voltages);
 for l = 1:length(voltages)
-    VoltageOutput{l+2,4} = round(voltages(l)*1000)/10;
+    VoltageOutput{l+3,4} = voltages(l)/maxV *100 ;
+    VoltageOutput{l+3,5} = voltages(l)/maxV *100 * sqrt( (volt_err(max_err) / maxV)^2 + (volt_err(l)/voltages(l))^2);
 end
 
 %% Output results
@@ -168,12 +170,14 @@ if fileID2 == -1
         error('*** Error: VoltageOutput.dat is still open. Run the program again *** ');
     end
 end
-fprintf(fileID2,'%s\t%s\t%s\t%s\n',VoltageOutput{1,:});
-fprintf(fileID2,'%s\t%s\t%s%s\t\n',VoltageOutput{2,:});
-for row = 3:length(VoltageOutput)
-    fprintf(fileID2,'%s\t%6.4f\t%6.4f\t%4.1f\n',VoltageOutput{row,:});
+fprintf(fileID2,'%s\t%s\t%s\t%s\t%s\n',VoltageOutput{1,:});
+fprintf(fileID2,'%s\t%s\t%s\t%s\t%s\n',VoltageOutput{2,:});
+fprintf(fileID2,'%s\t%s\t%s\t%s\t%s\n',VoltageOutput{3,:});
+for row = 4:length(VoltageOutput)
+    fprintf(fileID2,'%s\t%6.4f\t%6.4f\t%4.2f\t%4.2f\n',VoltageOutput{row,:});
 end
 fclose(fileID2);
+
 
 fclose('all');
 fprintf('\nDone\n');
