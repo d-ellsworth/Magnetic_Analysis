@@ -14,7 +14,7 @@ fprintf('\nRunning\n');
 
 tempData = 0;                   % use temperature data?
 
-zeroTime = 20;                  % time to zero average (s)
+zeroTime = 45;                  % time to zero average (s)
 
 autoAvg = 1;                    % 0= use avg times below
                                 % 1= detect light on from data file
