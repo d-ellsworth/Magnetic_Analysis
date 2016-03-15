@@ -14,25 +14,26 @@ fprintf('\nRunning\n');
 
 tempData = 0;                   % use temperature data?
 
-zeroTime = 45;                  % time to zero average (s)
+zeroTime = 20;                  % time to zero average (s)
 
 autoAvg = 1;                    % 0= use avg times below
                                 % 1= detect light on from data file
 
-get_mag = 0;                    % use to extract magnetic component of data 
+get_mag = 0;                    % use to extract magnetic component of data
                                 % Files must be in order:
                                 %   x1_+h, x1_-h, x2_+h, x2_-h...
+include_nonmag = 0;             % include non-magnetic component in output
 
 avgStart = 55;                  % when to start data average (s)
 avgStop = 95;                   % when to stop data average (s)
-cutoff = 300;                   % when to truncate data file (s)
+cutoff = 75;                    % when to truncate data file (s)
 
 files = dir('*.txt');
 numFiles = size(files,1);
 
 if numFiles == 0
     error('PSVanalysis:noData',['*** Error: No fitting data found ***'...
-                                '\n\tData must be *.txt file.']);
+          '\n\tData must be *.txt file.']);
 end
 
 % initialize outputs
@@ -91,7 +92,7 @@ for i=1:numFiles
     fixData(:,2) = data.data(1:cutoffIndex,2)-zeroAvg;     % voltage
     fixData(:,3) = data.data(1:cutoffIndex,3)-zeroAvgT;    % delta T
     fixData(:,4) = data.data(1:cutoffIndex,5);             % light on
-      
+    
     %% Prep for voltage averaging
     % period to be averaged is made imaginary if using autoAvg
     
@@ -117,7 +118,7 @@ for i=1:numFiles
             DataOutput{k+3,2*i} = fixData(k,2);
         end
     end
-
+    
 end
 
 %% Extract magnetic component
@@ -135,20 +136,46 @@ if (get_mag==1) && (tempData~=1)
             
             avgT = (pos_h_t + neg_h_t)/2;
             mag = (pos_h_v - neg_h_v)/2;
-            nonMag = (pos_h_v + neg_h_v)/2;
+            if include_nonmag
+                nonMag = (pos_h_v + neg_h_v)/2;
+            end
             
-            DataOutput{k,4*i-3} = avgT;
-            DataOutput{k,4*i-2} = mag;
-            DataOutput{k,4*i-1} = avgT;
-            DataOutput{k,4*i  } = nonMag;
+            if include_nonmag
+                DataOutput{k,4*i-3} = avgT;
+                DataOutput{k,4*i-2} = mag;
+                DataOutput{k,4*i-1} = avgT;
+                DataOutput{k,4*i  } = nonMag;
+            else
+                DataOutput{k,4*i-3} = avgT;
+                DataOutput{k,4*i-2} = mag;
+                DataOutput{k,4*i-1} = '';
+                DataOutput{k,4*i  } = '';
+            end
         end
         % Change output labels
-        tmpStr = DataOutput{3,4*i-2};
-        DataOutput{3,4*i-2} = strcat(tmpStr(1:end-2),'Mag');
-        tmpStr = DataOutput{3,4*i  };
-        DataOutput{3,4*i  } = strcat(tmpStr(1:end-2),'Non-Mag');
-        
+        if include_nonmag
+            tmpStr = DataOutput{3,4*i-2};
+            DataOutput{3,4*i-2} = strcat(tmpStr(1:end-2),'Mag');
+            tmpStr = DataOutput{3,4*i  };
+            DataOutput{3,4*i  } = strcat(tmpStr(1:end-2),'Non-Mag');
+        else
+            tmpStr = DataOutput{3,4*i-2};
+            DataOutput{3,4*i-2} = strcat(tmpStr(1:end-2),'Mag');
+            DataOutput{k,4*i  } = '';
+        end
+            
+    if ~include_nonmag
+        DataOutput{1,4*i-1} = '';
+        DataOutput{2,4*i-1} = '';
+        DataOutput{3,4*i-1} = '';
+        DataOutput{1,4*i  } = '';
+        DataOutput{2,4*i  } = '';
+        DataOutput{3,4*i  } = '';
     end
+    
+    end
+    % Delete empty columns
+    DataOutput(:,find(all(cellfun(@isempty,DataOutput),1)))=[];
 end
 
 %% Find average voltage signal
@@ -182,7 +209,7 @@ for i=1:size(DataOutput,2)/2
         avgV = mean(avgData(startIndex:stopIndex));
         stdV = std(avgData(startIndex:stopIndex));
     end
-     
+    
     VoltageOutput{i+3,1} = DataOutput{3,2*i};
     VoltageOutput{i+3,2} = avgV;
     VoltageOutput{i+3,3} = stdV;
@@ -241,7 +268,7 @@ if fileID2 == -1
     fileID2 = fopen('VoltageOutput.dat','w');
     if fileID2 == -1
         error(['*** Error: VoltageOutput.dat is still open.'...
-              ' Run the program again *** ']);
+               ' Run the program again *** ']);
     end
 end
 fprintf(fileID2,'%s\t%s\t%s\t%s\t%s\n',VoltageOutput{1,:});
