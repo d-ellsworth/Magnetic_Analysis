@@ -24,6 +24,9 @@ get_mag = 0;                    % use to extract magnetic component of data
                                 %   x1_+h, x1_-h, x2_+h, x2_-h...
 include_nonmag = 0;             % include non-magnetic component in output
 
+find_max = 1;                   % find maximum voltage for % calculations
+                                % if false use first file
+
 avgStart = 55;                  % when to start data average (s)
 avgStop = 95;                   % when to stop data average (s)
 cutoff = 75;                    % when to truncate data file (s)
@@ -56,6 +59,7 @@ testData = testData.data(1:cutoffIndex);
 DataOutput = cell(length(testData)+3,numFiles*2);
 
 %% Read files
+disp('Analysing data...')
 
 for i=1:numFiles
     % import data file
@@ -65,6 +69,7 @@ for i=1:numFiles
     [~, name] = strtok(files(i).name,'-');
     dataName = name(2:end-4);
     
+    disp(['File: ',dataName]);
     % setup output headers
     if tempData == 1
         DataOutput{1,3*i-2} = 'Time';
@@ -126,6 +131,7 @@ end
 % data must be in order: x1_+h, x1_-h, x2_+h, x2_-h...
 
 if (get_mag==1) && (tempData~=1)
+    disp('Getting magnetic component...');
     for i=1:size(DataOutput,2)/4
         % find magnetic and non-magnetic components
         for k = 4:length(DataOutput)
@@ -137,7 +143,7 @@ if (get_mag==1) && (tempData~=1)
             avgT = (pos_h_t + neg_h_t)/2;
             mag = (pos_h_v - neg_h_v)/2;
             if include_nonmag
-                nonMag = (pos_h_v + neg_h_v)/2;
+                nonMag = (pos_h_v + neg_h_v)/2; %#ok<*UNRCH>
             end
             
             if include_nonmag
@@ -182,6 +188,7 @@ end
 % if using autoAvg: average imaginary numbers, make them real again
 % otherwise average over times specified in setup
 
+disp('Finding averages...');
 for i=1:size(DataOutput,2)/2
     if autoAvg == 1
         avgData = zeros(length(DataOutput));
@@ -218,9 +225,14 @@ end
 
 %% Find percent of max voltage
 
-voltages = abs(cell2mat(VoltageOutput(3:end,2)));
-volt_err = abs(cell2mat(VoltageOutput(3:end,3)));
-[maxV, max_err] = max(voltages);
+voltages = abs(cell2mat(VoltageOutput(4:end,2)));
+volt_err = abs(cell2mat(VoltageOutput(4:end,3)));
+if find_max
+    [maxV, max_err] = max(voltages);
+else
+    maxV = cell2mat(VoltageOutput(4,2));
+    max_err = 1;
+end
 percent_volt = round((voltages./maxV)*10000)/100;
 for l = 1:length(voltages)
     VoltageOutput{l+3,4} = voltages(l)/maxV *100 ;
@@ -228,8 +240,10 @@ for l = 1:length(voltages)
         sqrt((volt_err(max_err)/maxV)^2 + (volt_err(l)/voltages(l))^2);
 end
 
+
 %% Output results
 
+disp('Making output files...');
 [nrows, ncols] = size(DataOutput);
 formatSpec1 = char('');
 formatSpec2 = char('');
@@ -242,7 +256,7 @@ formatSpec2 = strcat(formatSpec2,'\n');
 
 fileID1 = fopen('DataOutput.dat','w');
 if fileID1 == -1
-    fprintf(2,['\n*** Error: DataOutput.dat already open.'...
+    disp(2,['\n*** Error: DataOutput.dat already open.'...
                ' Close file and press the any key *** \n']);
     pause;
     fileID1 = fopen('DataOutput.dat','w');
@@ -262,7 +276,7 @@ fclose(fileID1);
 
 fileID2 = fopen('VoltageOutput.dat','w');
 if fileID2 == -1
-    fprintf(2,['\n*** Error: VoltageOutput.dat already open.'...
+    disp(2,['\n*** Error: VoltageOutput.dat already open.'...
                ' Close file and press the any key *** \n']);
     pause;
     fileID2 = fopen('VoltageOutput.dat','w');
