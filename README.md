@@ -10,3 +10,9 @@ Various Matlab analysis tools for magnetics research.
 
 ## PSV
 `PSVanalysis.m` is used for cleaning up and analyzing time domain data from the photo-spin-voltaic effect.
+
+`AveragePSV.m` averages multiple .txt files into one output.
+
+`PSVanaFun.m` and `AvgFun.m` are function versions of the previous two scripts.
+
+`PSV_SSE.m` does the analysis for separating and analyzing simultaneous PSV & SSE signals.
